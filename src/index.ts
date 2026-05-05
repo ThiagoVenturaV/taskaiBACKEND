@@ -47,12 +47,20 @@ app.get('/health', (_req, res) => res.json({ status: 'ok' }));
 app.use((_req, res) => res.status(404).json({ error: 'Not found' }));
 
 // ─── Start ────────────────────────────────────────────────────────────────────
-initializeDatabase()
-  .then(() => {
-    app.listen(PORT, () => {
-      console.log(`✅ Task AI backend running on http://localhost:${PORT}`);
+if (process.env.NODE_ENV !== 'production') {
+  initializeDatabase()
+    .then(() => {
+      app.listen(PORT, () => {
+        console.log(`✅ Task AI backend running on http://localhost:${PORT}`);
+      });
+    })
+    .catch((err) => {
+      console.error('Failed to connect to the database:', err);
     });
-  })
-  .catch((err) => {
-    console.error('Failed to connect to the database:', err);
-  });
+} else {
+  // Try to initialize database lazily for production
+  initializeDatabase().catch(err => console.error('Database initialization failed:', err));
+}
+
+// Export the app for Vercel Serverless Functions
+export default app;
