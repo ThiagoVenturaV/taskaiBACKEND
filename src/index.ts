@@ -12,9 +12,10 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
+const allowedOrigins = [FRONTEND_URL, FRONTEND_URL.replace(/\/$/, '')];
 
 // ─── Middleware ───────────────────────────────────────────────────────────────
-app.use(cors({ origin: FRONTEND_URL, credentials: true }));
+app.use(cors({ origin: allowedOrigins, credentials: true }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
