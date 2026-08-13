@@ -8,6 +8,7 @@ import { authRouter } from './routes/auth';
 import { tasksRouter } from './routes/tasks';
 import { uploadRouter } from './routes/upload';
 import { usersRouter } from './routes/users';
+import { aiRouter } from './routes/ai';
 import { authenticate } from './auth';
 
 const app = express();
@@ -55,6 +56,12 @@ app.use('/api/auth', rateLimit({
 }), authRouter);
 app.use('/api/tasks', tasksRouter);
 app.use('/api/upload', uploadRouter);
+app.use('/api/ai', rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+}), authenticate, aiRouter);
 
 // Protected user routes
 app.use('/api/users', authenticate, usersRouter);
