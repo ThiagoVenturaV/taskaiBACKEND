@@ -1,6 +1,8 @@
 import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
 import { initializeDatabase } from './database';
 import { authRouter } from './routes/auth';
 import { tasksRouter } from './routes/tasks';
@@ -11,16 +13,46 @@ import { authenticate } from './auth';
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
-const allowedOrigins = [FRONTEND_URL, FRONTEND_URL.replace(/\/$/, '')];
+const configuredOrigins = (process.env.ALLOWED_ORIGINS || process.env.FRONTEND_URL || '')
+  .split(',')
+  .map(origin => origin.trim().replace(/\/$/, ''))
+  .filter(Boolean);
+if (process.env.NODE_ENV === 'production' && configuredOrigins.length === 0) {
+  throw new Error('ALLOWED_ORIGINS is required in production');
+}
+const allowedOrigins = configuredOrigins.length > 0
+  ? configuredOrigins
+  : ['http://localhost:5173'];
 
 // ─── Middleware ───────────────────────────────────────────────────────────────
-app.use(cors({ origin: allowedOrigins, credentials: true }));
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.disable('x-powered-by');
+app.use(helmet());
+app.use(cors({
+  origin(origin, callback) {
+    if (!origin || allowedOrigins.includes(origin.replace(/\/$/, ''))) {
+      callback(null, true);
+      return;
+    }
+    callback(new Error('Origin is not allowed by CORS'));
+  },
+  credentials: true,
+}));
+app.use(express.json({ limit: '100kb' }));
+app.use(express.urlencoded({ extended: true, limit: '100kb', parameterLimit: 100 }));
+app.use(rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 300,
+  standardHeaders: true,
+  legacyHeaders: false,
+}));
 
 // ─── Routes ──────────────────────────────────────────────────────────────────
-app.use('/api/auth', authRouter);
+app.use('/api/auth', rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+}), authRouter);
 app.use('/api/tasks', tasksRouter);
 app.use('/api/upload', uploadRouter);
 

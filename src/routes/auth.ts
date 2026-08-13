@@ -6,6 +6,14 @@ import { signToken } from '../auth';
 
 export const authRouter = Router();
 
+const normalizeEmail = (email: unknown): string | null => {
+  if (typeof email !== 'string') return null;
+  const normalized = email.trim().toLowerCase();
+  return normalized.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized)
+    ? normalized
+    : null;
+};
+
 // POST /api/auth/register
 authRouter.post('/register', async (req: Request, res: Response): Promise<void> => {
   try {
@@ -18,12 +26,20 @@ authRouter.post('/register', async (req: Request, res: Response): Promise<void> 
       referral?: string;
     };
 
-    if (!name || !email || !password) {
-      res.status(400).json({ error: 'Name, email and password are required' });
+    const normalizedEmail = normalizeEmail(email);
+    if (
+      typeof name !== 'string' || name.trim().length < 2 || name.length > 120 ||
+      !normalizedEmail || typeof password !== 'string' ||
+      password.length < 10 || password.length > 128 ||
+      (phone !== undefined && (typeof phone !== 'string' || phone.length > 30)) ||
+      (cpf !== undefined && (typeof cpf !== 'string' || cpf.length > 20)) ||
+      (referral !== undefined && (typeof referral !== 'string' || referral.length > 120))
+    ) {
+      res.status(400).json({ error: 'Invalid registration data' });
       return;
     }
 
-    const existing = await db.query('SELECT id FROM users WHERE email = $1', [email]);
+    const existing = await db.query('SELECT id FROM users WHERE email = $1', [normalizedEmail]);
     if (existing.rows.length > 0) {
       res.status(409).json({ error: 'Email already registered' });
       return;
@@ -34,14 +50,14 @@ authRouter.post('/register', async (req: Request, res: Response): Promise<void> 
 
     await db.query(
       'INSERT INTO users (id, name, phone, cpf, email, password, referral) VALUES ($1, $2, $3, $4, $5, $6, $7)',
-      [id, name, phone ?? null, cpf ?? null, email, hashed, referral ?? null]
+      [id, name.trim(), phone ?? null, cpf ?? null, normalizedEmail, hashed, referral ?? null]
     );
 
-    const token = signToken({ userId: id, email });
+    const token = signToken({ userId: id, email: normalizedEmail });
 
     res.status(201).json({
       token,
-      user: { id, name, email },
+      user: { id, name: name.trim(), email: normalizedEmail },
     });
   } catch (err) {
     console.error('[register]', err);
@@ -54,12 +70,13 @@ authRouter.post('/login', async (req: Request, res: Response): Promise<void> => 
   try {
     const { email, password } = req.body as { email: string; password: string };
 
-    if (!email || !password) {
-      res.status(400).json({ error: 'Email and password are required' });
+    const normalizedEmail = normalizeEmail(email);
+    if (!normalizedEmail || typeof password !== 'string' || password.length > 128) {
+      res.status(400).json({ error: 'Invalid login data' });
       return;
     }
 
-    const userResult = await db.query('SELECT id, name, email, password FROM users WHERE email = $1', [email]);
+    const userResult = await db.query('SELECT id, name, email, password FROM users WHERE email = $1', [normalizedEmail]);
     const user = userResult.rows[0];
 
     if (!user) {
