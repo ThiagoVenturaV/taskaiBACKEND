@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { db } from '../database';
 import { authenticate } from '../auth';
+import { v4 as uuidv4, validate as validateUuid } from 'uuid';
 
 export const usersRouter = Router();
 usersRouter.use(authenticate);
@@ -9,9 +10,9 @@ usersRouter.use(authenticate);
 usersRouter.get('/search', async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = (req as any).user.userId;
-    const q = (req.query.q as string) || '';
+    const q = typeof req.query.q === 'string' ? req.query.q.trim() : '';
 
-    if (q.length < 2) {
+    if (q.length < 2 || q.length > 100) {
       res.json([]);
       return;
     }
@@ -55,12 +56,11 @@ usersRouter.post('/share', async (req: Request, res: Response): Promise<void> =>
     const ownerId = (req as any).user.userId;
     const { sharedWithId } = req.body as { sharedWithId: string };
 
-    if (!sharedWithId) {
-      res.status(400).json({ error: 'sharedWithId is required' });
+    if (!validateUuid(sharedWithId) || sharedWithId === ownerId) {
+      res.status(400).json({ error: 'Invalid sharedWithId' });
       return;
     }
 
-    const { v4: uuidv4 } = require('uuid');
     try {
       await db.query(
         'INSERT INTO board_shares (id, owner_id, shared_with_id) VALUES ($1, $2, $3)',

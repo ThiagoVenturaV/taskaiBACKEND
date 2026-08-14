@@ -9,6 +9,7 @@ export const tasksRouter = Router();
 tasksRouter.use(authenticate);
 
 type ColumnId = 'todo' | 'in-progress' | 'review' | 'done';
+const columns = new Set<ColumnId>(['todo', 'in-progress', 'review', 'done']);
 
 interface DbTask {
   id: string;
@@ -68,8 +69,13 @@ tasksRouter.post('/', async (req: Request, res: Response): Promise<void> => {
       columnId?: ColumnId;
     };
 
-    if (!title) {
-      res.status(400).json({ error: 'Title is required' });
+    if (
+      typeof title !== 'string' || title.trim().length === 0 || title.length > 200 ||
+      !columns.has(columnId) ||
+      (description !== undefined && (typeof description !== 'string' || description.length > 5000)) ||
+      (tag !== undefined && (typeof tag !== 'string' || tag.length > 80))
+    ) {
+      res.status(400).json({ error: 'Invalid task data' });
       return;
     }
 
@@ -85,7 +91,7 @@ tasksRouter.post('/', async (req: Request, res: Response): Promise<void> => {
     const { rows } = await db.query(
       `INSERT INTO tasks (id, user_id, title, description, due_date, tag, column_id, position, created_at, updated_at)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`,
-      [id, userId, title, description ?? null, dueDate ?? null, tag ?? null, columnId, position, now, now]
+      [id, userId, title.trim(), description ?? null, dueDate ?? null, tag ?? null, columnId, position, now, now]
     );
 
     res.status(201).json(mapTask(rows[0] as DbTask));
@@ -118,6 +124,18 @@ tasksRouter.patch('/:id', async (req: Request, res: Response): Promise<void> => 
     };
 
     const now = new Date().toISOString();
+
+    if (
+      (title !== undefined && (typeof title !== 'string' || title.trim().length === 0 || title.length > 200)) ||
+      (description !== undefined && (typeof description !== 'string' || description.length > 5000)) ||
+      (tag !== undefined && (typeof tag !== 'string' || tag.length > 80)) ||
+      (columnId !== undefined && !columns.has(columnId)) ||
+      (completed !== undefined && typeof completed !== 'boolean') ||
+      (position !== undefined && (!Number.isInteger(position) || position < 0))
+    ) {
+      res.status(400).json({ error: 'Invalid task update' });
+      return;
+    }
 
     const { rows } = await db.query(
       `UPDATE tasks SET
@@ -175,7 +193,13 @@ tasksRouter.post('/reorder', async (req: Request, res: Response): Promise<void> 
     const userId = (req as any).user.userId;
     const { tasks } = req.body as { tasks: Array<{ id: string; columnId: ColumnId; position: number }> };
 
-    if (!Array.isArray(tasks)) {
+    if (
+      !Array.isArray(tasks) || tasks.length > 1000 ||
+      tasks.some(item =>
+        typeof item?.id !== 'string' || !columns.has(item.columnId) ||
+        !Number.isInteger(item.position) || item.position < 0
+      )
+    ) {
       res.status(400).json({ error: 'tasks must be an array' });
       return;
     }
