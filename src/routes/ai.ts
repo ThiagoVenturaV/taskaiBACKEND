@@ -6,7 +6,7 @@ if (!GROQ_API_KEY || GROQ_API_KEY.length < 20) {
   throw new Error('GROQ_API_KEY is required');
 }
 
-const GROQ_MODEL = process.env.GROQ_MODEL || 'llama-3.3-70b-versatile';
+const GROQ_MODEL = process.env.GROQ_MODEL || 'openai/gpt-oss-120b';
 const GROQ_ENDPOINT = 'https://api.groq.com/openai/v1/chat/completions';
 const columns = new Set(['todo', 'in-progress', 'review', 'done']);
 const actionTypes = new Set(['create', 'move', 'delete', 'update', 'list', 'complete', 'unknown']);
